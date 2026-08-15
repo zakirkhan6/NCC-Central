@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary-navy: #12355B;
+    --secondary-navy: #1E4E79;
+    --ncc-green: #1F6B45;
+    --accent-gold: #D4A72C;
+    --success: #2E7D5B;
+    --warning: #C58A00;
+    --danger: #C94A4A;
+    --info: #3478B5;
+    --bg-primary: #F7F9FC;
+    --bg-surface: #FFFFFF;
+    --border: #E2E8F0;
+    --text-primary: #172033;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+/* Custom Scrollbar for dashboard data tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
