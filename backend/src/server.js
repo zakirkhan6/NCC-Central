@@ -14,3 +14,5 @@ process.on('unhandledRejection', (err) => {
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught Exception:', { error: err.message, stack: err.stack });
 });
+
+export default app;
