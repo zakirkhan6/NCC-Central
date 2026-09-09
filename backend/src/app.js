@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
+import publicRoutes from './routes/publicRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import cadetsRoutes from './routes/cadetsRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
@@ -35,10 +36,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Rate Limiting for auth routes
+// Rate Limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 500,
   message: { success: false, message: 'Too many requests from this IP, please try again later.' }
 });
 
@@ -56,6 +57,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Register API Routes
+app.use('/api/public', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/cadets', cadetsRoutes);
 app.use('/api/attendance', attendanceRoutes);

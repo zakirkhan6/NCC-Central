@@ -37,15 +37,13 @@ const DashboardSwitch = () => {
   return <CadetDashboard />;
 };
 
-// Route Guard for RBAC Permissions
+// Protected Route Guard
 const ProtectedRoleRoute = ({ allowedRoles, children }) => {
   const { user } = useAuth();
   const role = user?.role || 'CADET';
-
   if (!allowedRoles.includes(role)) {
     return <Navigate to="/dashboard" replace />;
   }
-
   return children;
 };
 
@@ -59,6 +57,10 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            {/* Certificate verification routes - both supported */}
+            <Route path="/verify" element={<CertificateVerifyPage />} />
+            <Route path="/verify/:certNo" element={<CertificateVerifyPage />} />
+            {/* Legacy route for backward compatibility */}
             <Route path="/verify-certificate/:certNo" element={<CertificateVerifyPage />} />
 
             {/* Authenticated Dashboard Routes */}
@@ -66,23 +68,22 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardSwitch />} />
               <Route path="/profile" element={<ProfilePage />} />
 
-              {/* Cadets Directory - Officers/Admin Only */}
+              {/* Cadets Directory */}
               <Route path="/cadets" element={
                 <ProtectedRoleRoute allowedRoles={['ADMIN', 'ANO']}>
                   <CadetsPage />
                 </ProtectedRoleRoute>
               } />
-
               <Route path="/cadets/:id" element={<CadetProfilePage />} />
 
-              {/* Attendance Marking - Officers/Admin Only */}
+              {/* Attendance - Officers/Admin Only */}
               <Route path="/attendance" element={
                 <ProtectedRoleRoute allowedRoles={['ADMIN', 'ANO']}>
                   <AttendancePage />
                 </ProtectedRoleRoute>
               } />
 
-              {/* Shared Activities & Records */}
+              {/* Shared Activities */}
               <Route path="/parades" element={<ParadesPage />} />
               <Route path="/training" element={<TrainingPage />} />
               <Route path="/events" element={<EventsPage />} />
@@ -91,14 +92,14 @@ export default function App() {
               <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
 
-              {/* Reports & Analytics - Officers/Admin Only */}
+              {/* Reports - Officers/Admin Only */}
               <Route path="/reports" element={
                 <ProtectedRoleRoute allowedRoles={['ADMIN', 'ANO']}>
                   <ReportsPage />
                 </ProtectedRoleRoute>
               } />
 
-              {/* Officers / User Management - Admin Only */}
+              {/* User Management - Admin Only */}
               <Route path="/users" element={
                 <ProtectedRoleRoute allowedRoles={['ADMIN']}>
                   <UsersPage />
@@ -112,7 +113,7 @@ export default function App() {
                 </ProtectedRoleRoute>
               } />
 
-              {/* System Settings - Officers/Admin Only */}
+              {/* Settings - Officers/Admin */}
               <Route path="/settings" element={
                 <ProtectedRoleRoute allowedRoles={['ADMIN', 'ANO']}>
                   <SettingsPage />
@@ -120,7 +121,7 @@ export default function App() {
               } />
             </Route>
 
-            {/* Catch-all redirect */}
+            {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

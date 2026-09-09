@@ -447,6 +447,17 @@ class DataStore {
     }
   }
 
+  toCamelCase(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(item => this.toCamelCase(item));
+    const newObj = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      newObj[camelKey] = value;
+    }
+    return newObj;
+  }
+
   async syncFromSupabase() {
     if (!this.supabaseConnected || !supabase) return;
     try {
@@ -454,7 +465,29 @@ class DataStore {
         try {
           const { data, error } = await supabase.from(table).select('*');
           if (!error && data && data.length > 0) {
-            this.data[collection] = data;
+            const camelData = data.map(item => this.toCamelCase(item));
+
+            if (collection === 'users') {
+              // Preserve password and local account properties
+              const existingUsers = this.data.users || [];
+              this.data.users = camelData.map(remoteUser => {
+                const localUser = existingUsers.find(u => u.id === remoteUser.id || u.email?.toLowerCase() === remoteUser.email?.toLowerCase());
+                return {
+                  password: localUser?.password || 'password123',
+                  fullName: remoteUser.fullName,
+                  email: remoteUser.email,
+                  role: remoteUser.role || 'CADET',
+                  phone: remoteUser.phone || '',
+                  avatarUrl: remoteUser.avatarUrl || '',
+                  status: remoteUser.status || 'ACTIVE',
+                  createdAt: remoteUser.createdAt || new Date().toISOString(),
+                  ...localUser,
+                  ...remoteUser
+                };
+              });
+            } else {
+              this.data[collection] = camelData;
+            }
           }
         } catch (e) {
           // ignore individual table errors
@@ -497,7 +530,49 @@ class DataStore {
     this.saveData();
   }
 
-  addItem(collectionName, item) {
+  isUuid(str) {
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  }
+
+  toSnakeCase(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(item => this.toSnakeCase(item));
+    const newObj = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      newObj[snakeKey] = value;
+    }
+    return newObj;
+  }
+
+  filterColumnsForTable(tableName, payload) {
+    const tableColumns = {
+      cadets: ['id', 'user_id', 'reg_no', 'full_name', 'email', 'phone', 'rank', 'company', 'platoon', 'date_joined', 'blood_group', 'dob', 'gender', 'father_name', 'college_name', 'course', 'year_of_study', 'status', 'created_at'],
+      profiles: ['id', 'email', 'full_name', 'role', 'phone', 'avatar_url', 'status', 'created_at', 'updated_at'],
+      attendance: ['id', 'cadet_id', 'date', 'company', 'platoon', 'status', 'session', 'remarks', 'created_at'],
+      parades: ['id', 'title', 'commander', 'company', 'platoon', 'location', 'date', 'time', 'status', 'notes', 'created_at'],
+      training_modules: ['id', 'title', 'category', 'instructor', 'date', 'time', 'location', 'description', 'status', 'created_at'],
+      events: ['id', 'title', 'category', 'date', 'time', 'location', 'capacity', 'eligibility', 'description', 'is_upcoming', 'created_at'],
+      achievements: ['id', 'cadet_id', 'title', 'category', 'description', 'date', 'level', 'position', 'organization', 'document_url', 'created_at'],
+      certificates: ['id', 'certificate_no', 'cadet_id', 'course_name', 'issue_date', 'grade', 'status', 'created_at'],
+      announcements: ['id', 'title', 'content', 'priority', 'audience', 'publish_date', 'author', 'created_at'],
+      audit_logs: ['id', 'user_name', 'role', 'action', 'resource', 'details', 'timestamp']
+    };
+
+    const allowed = tableColumns[tableName];
+    if (!allowed) return payload;
+
+    const filtered = {};
+    for (const col of allowed) {
+      if (payload[col] !== undefined) {
+        filtered[col] = payload[col];
+      }
+    }
+    return filtered;
+  }
+
+  async addItem(collectionName, item) {
     if (!this.data[collectionName]) {
       this.data[collectionName] = [];
     }
@@ -508,33 +583,82 @@ class DataStore {
     if (supabase) {
       const table = TABLE_MAP[collectionName];
       if (table) {
-        supabase.from(table).insert([item]).then(({ error }) => {
+        let payload = this.toSnakeCase(item);
+        payload = this.filterColumnsForTable(table, payload);
+        
+        // Ensure UUID validity if provided
+        if (payload.id && !this.isUuid(payload.id)) {
+          delete payload.id;
+        }
+        if (payload.user_id && !this.isUuid(payload.user_id)) {
+          delete payload.user_id;
+        }
+
+        try {
+          const { error } = await supabase.from(table).insert([payload]);
           if (error && error.code !== 'PGRST205') {
-            logger.warn(`[Supabase Insert Warning] ${table}: ${error.message}`);
+            logger.warn(`[Supabase Insert Warning] ${table}: ${error.message} (Code: ${error.code})`);
           }
-        }).catch(() => {});
+        } catch (e) {
+          logger.warn(`[Supabase Insert Error] ${table}: ${e.message}`);
+        }
       }
     }
 
     return item;
   }
 
-  updateItem(collectionName, id, updates) {
+  async updateItem(collectionName, id, updates) {
     const list = this.data[collectionName] || [];
     const index = list.findIndex(i => i.id === id);
     if (index !== -1) {
-      list[index] = { ...list[index], ...updates };
+      const existingItem = list[index];
+      list[index] = { ...existingItem, ...updates };
       this.saveData();
 
       // Replicate update to Supabase
       if (supabase) {
         const table = TABLE_MAP[collectionName];
         if (table) {
-          supabase.from(table).update(updates).eq('id', id).then(({ error }) => {
-            if (error && error.code !== 'PGRST205') {
-              logger.warn(`[Supabase Update Warning] ${table}: ${error.message}`);
+          let payload = this.toSnakeCase(updates);
+          payload = this.filterColumnsForTable(table, payload);
+
+          if (payload.id && !this.isUuid(payload.id)) {
+            delete payload.id;
+          }
+
+          try {
+            let query = null;
+            if (this.isUuid(id)) {
+              query = supabase.from(table).update(payload).eq('id', id);
+            } else if (table === 'cadets' && (existingItem.regNo || updates.regNo)) {
+              // Match by unique reg_no for legacy/mock string IDs
+              query = supabase.from(table).update(payload).eq('reg_no', existingItem.regNo || updates.regNo);
+            } else if (table === 'profiles' && (existingItem.email || updates.email)) {
+              query = supabase.from(table).update(payload).eq('email', existingItem.email || updates.email);
             }
-          }).catch(() => {});
+
+            if (query) {
+              const { data, error } = await query.select();
+              if (error) {
+                logger.warn(`[Supabase Update Warning] ${table}: ${error.message} (Code: ${error.code})`);
+              } else if (!data || data.length === 0) {
+                // If row didn't exist in Supabase yet, upsert full record
+                let fullPayload = this.toSnakeCase(list[index]);
+                fullPayload = this.filterColumnsForTable(table, fullPayload);
+                if (fullPayload.id && !this.isUuid(fullPayload.id)) delete fullPayload.id;
+                if (fullPayload.user_id && !this.isUuid(fullPayload.user_id)) delete fullPayload.user_id;
+
+                const onConflict = table === 'cadets' ? 'reg_no' : (table === 'profiles' ? 'email' : 'id');
+                const { error: upsertErr } = await supabase.from(table).upsert(fullPayload, { onConflict });
+                if (upsertErr) {
+                  logger.warn(`[Supabase Upsert Warning] ${table}: ${upsertErr.message}`);
+                }
+              }
+            }
+          } catch (e) {
+            logger.warn(`[Supabase Update Error] ${table}: ${e.message}`);
+          }
         }
       }
 
@@ -543,8 +667,9 @@ class DataStore {
     return null;
   }
 
-  deleteItem(collectionName, id) {
+  async deleteItem(collectionName, id) {
     const list = this.data[collectionName] || [];
+    const itemToDelete = list.find(i => i.id === id);
     const filtered = list.filter(i => i.id !== id);
     this.data[collectionName] = filtered;
     this.saveData();
@@ -552,12 +677,26 @@ class DataStore {
     // Replicate delete to Supabase
     if (supabase) {
       const table = TABLE_MAP[collectionName];
-      if (table) {
-        supabase.from(table).delete().eq('id', id).then(({ error }) => {
-          if (error && error.code !== 'PGRST205') {
-            logger.warn(`[Supabase Delete Warning] ${table}: ${error.message}`);
+      if (table && itemToDelete) {
+        try {
+          let query = null;
+          if (this.isUuid(id)) {
+            query = supabase.from(table).delete().eq('id', id);
+          } else if (table === 'cadets' && itemToDelete.regNo) {
+            query = supabase.from(table).delete().eq('reg_no', itemToDelete.regNo);
+          } else if (table === 'profiles' && itemToDelete.email) {
+            query = supabase.from(table).delete().eq('email', itemToDelete.email);
           }
-        }).catch(() => {});
+
+          if (query) {
+            const { error } = await query;
+            if (error && error.code !== 'PGRST205') {
+              logger.warn(`[Supabase Delete Warning] ${table}: ${error.message} (Code: ${error.code})`);
+            }
+          }
+        } catch (e) {
+          logger.warn(`[Supabase Delete Error] ${table}: ${e.message}`);
+        }
       }
     }
 

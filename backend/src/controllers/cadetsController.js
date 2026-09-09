@@ -156,12 +156,14 @@ export const updateCadet = (req, res) => {
     });
   }
 
-  // Update associated user full name/phone if altered
-  if (updates.fullName || updates.phone) {
-    dbStore.updateItem('users', cadet.userId, {
-      fullName: updates.fullName || cadet.fullName,
-      phone: updates.phone || cadet.phone
-    });
+  // Update associated user profile (fullName, phone, avatarUrl, email) if altered
+  if (cadet.userId && (updates.fullName || updates.phone || updates.avatarUrl || updates.email)) {
+    const userUpdates = {};
+    if (updates.fullName) userUpdates.fullName = updates.fullName;
+    if (updates.phone) userUpdates.phone = updates.phone;
+    if (updates.avatarUrl) userUpdates.avatarUrl = updates.avatarUrl;
+    if (updates.email) userUpdates.email = updates.email;
+    dbStore.updateItem('users', cadet.userId, userUpdates);
   }
 
   dbStore.addItem('auditLogs', {
@@ -171,13 +173,61 @@ export const updateCadet = (req, res) => {
     action: 'CADET_UPDATED',
     resource: `Cadet (${cadet.regNo})`,
     timestamp: new Date().toISOString(),
-    details: `Updated cadet profile information`
+    details: `Updated cadet profile information for ${cadet.fullName}`
   });
 
   return res.json({
     success: true,
     message: 'Cadet profile updated successfully.',
     data: cadet
+  });
+};
+
+export const deleteCadet = (req, res) => {
+  const { id } = req.params;
+  const cadets = dbStore.getCollection('cadets');
+  const cadet = cadets.find(c => c.id === id);
+
+  if (!cadet) {
+    return res.status(404).json({
+      success: false,
+      message: 'Cadet record not found.'
+    });
+  }
+
+  // Delete cadet record from database & store
+  dbStore.deleteItem('cadets', id);
+
+  // If there's an associated user account, delete it as well
+  if (cadet.userId) {
+    dbStore.deleteItem('users', cadet.userId);
+  }
+
+  // Clean up related attendance records
+  const attendance = dbStore.getCollection('attendance').filter(a => a.cadetId !== id);
+  dbStore.setCollection('attendance', attendance);
+
+  // Clean up related achievements
+  const achievements = dbStore.getCollection('achievements').filter(a => a.cadetId !== id);
+  dbStore.setCollection('achievements', achievements);
+
+  // Clean up related certificates
+  const certificates = dbStore.getCollection('certificates').filter(c => c.cadetId !== id);
+  dbStore.setCollection('certificates', certificates);
+
+  dbStore.addItem('auditLogs', {
+    id: `log-${Date.now()}`,
+    user: req.user.fullName,
+    role: req.user.role,
+    action: 'CADET_DELETED',
+    resource: `Cadet (${cadet.regNo})`,
+    timestamp: new Date().toISOString(),
+    details: `Deleted cadet record ${cadet.fullName} (${cadet.regNo})`
+  });
+
+  return res.json({
+    success: true,
+    message: 'Cadet record deleted successfully.'
   });
 };
 

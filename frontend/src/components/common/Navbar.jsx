@@ -1,87 +1,112 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell, Search, LogOut, User, ShieldCheck } from 'lucide-react';
-import { Badge } from './Badge';
+import { Bell, LogOut, User, ChevronDown, Search, Menu } from 'lucide-react';
+import { StatusBadge } from './UIComponents';
 
-export const Navbar = ({ currentTitle = 'Dashboard' }) => {
+export const Navbar = ({ onMenuToggle }) => {
   const { user, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchVal, setSearchVal] = useState('');
+  const navigate = useNavigate();
+  const dropRef = useRef(null);
 
-  const getRoleBadgeVariant = (role) => {
-    switch (role) {
-      case 'ADMIN': return 'gold';
-      case 'ANO': return 'success';
-      default: return 'primary';
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchVal.trim()) {
+      navigate(`/cadets?search=${encodeURIComponent(searchVal.trim())}`);
+      setSearchVal('');
     }
   };
 
+  const initials = user?.fullName
+    ? user.fullName.split(' ').map(n => n[0]).slice(0, 2).join('')
+    : 'U';
+
   return (
-    <header className="h-16 border-b border-[#E2E8F0] bg-white sticky top-0 z-30 px-6 flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <h1 className="text-lg font-bold text-[#172033] flex items-center gap-2">
-          <span className="text-[#12355B]">NCC Central</span>
-          <span className="text-[#CBD5E1]">/</span>
-          <span className="text-[#64748B] font-medium">{currentTitle}</span>
-        </h1>
+    <header className="h-14 border-b border-[#DCE5EF] bg-white sticky top-0 z-20 px-4 flex items-center justify-between gap-4 shadow-sm">
+      {/* Left: menu toggle + breadcrumb */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuToggle}
+          className="lg:hidden w-8 h-8 rounded-lg hover:bg-[#EAF0F8] flex items-center justify-center transition-colors"
+        >
+          <Menu className="w-4 h-4 text-[#607086]" />
+        </button>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-700 text-[#9BAEC0] uppercase tracking-wider hidden sm:block">NCC CENTRAL</span>
+          <span className="text-[#DCE5EF] hidden sm:block">/</span>
+          <span className="text-xs font-700 text-[#123B63]">
+            {user?.role === 'ADMIN' ? 'Administrator Console' : user?.role === 'ANO' ? 'Officer Dashboard' : 'Cadet Portal'}
+          </span>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Quick Search */}
-        <div className="relative hidden md:block">
-          <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Right: search, bell, user */}
+      <div className="flex items-center gap-2">
+        {/* Quick search */}
+        <form onSubmit={handleSearch} className="relative hidden md:block">
+          <Search className="w-3.5 h-3.5 text-[#9BAEC0] absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
-            type="text"
-            placeholder="Search cadet reg no, parade, event..."
-            className="pl-9 pr-4 py-1.5 text-xs bg-[#F7F9FC] border border-[#E2E8F0] rounded-lg text-[#172033] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#12355B]/20 focus:border-[#12355B] w-64 transition-all"
+            value={searchVal}
+            onChange={e => setSearchVal(e.target.value)}
+            placeholder="Search cadets, events..."
+            className="pl-8 pr-3 py-1.5 text-xs bg-[#F5F8FC] border border-[#DCE5EF] rounded-lg text-[#142238] placeholder-[#9BAEC0] focus:outline-none focus:ring-2 focus:ring-[#123B63]/10 focus:border-[#123B63] w-52 transition-all"
           />
-        </div>
+        </form>
 
-        {/* Notification bell */}
-        <button className="relative p-2 text-[#64748B] hover:text-[#12355B] rounded-lg hover:bg-[#F1F5F9] transition-colors">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#C94A4A] animate-pulse"></span>
+        {/* Notifications */}
+        <button className="relative w-8 h-8 rounded-lg hover:bg-[#EAF0F8] flex items-center justify-center transition-colors text-[#607086]">
+          <Bell className="w-4 h-4" />
+          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#C94A4A]" />
         </button>
 
-        {/* User Profile */}
-        <div className="relative">
+        {/* User Dropdown */}
+        <div className="relative" ref={dropRef}>
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-[#F1F5F9] transition-colors"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#EAF0F8] transition-colors"
           >
-            <img
-              src={user?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200"}
-              alt="Avatar"
-              className="w-8 h-8 rounded-lg object-cover border border-[#E2E8F0]"
-            />
-            <div className="text-left hidden sm:block">
-              <div className="text-xs font-semibold text-[#172033] flex items-center gap-1.5">
-                {user?.fullName}
-                <Badge variant={getRoleBadgeVariant(user?.role)}>{user?.role}</Badge>
-              </div>
-              <div className="text-[10px] text-[#94A3B8]">{user?.email}</div>
+            <div className="w-7 h-7 rounded-lg bg-[#123B63] flex items-center justify-center font-black text-white text-xs flex-shrink-0">
+              {initials}
             </div>
+            <div className="text-left hidden sm:block">
+              <div className="text-xs font-700 text-[#142238] leading-tight max-w-[120px] truncate">{user?.fullName || 'User'}</div>
+              <div className="text-[10px] text-[#9BAEC0] font-500">{user?.role || 'CADET'}</div>
+            </div>
+            <ChevronDown className={`w-3.5 h-3.5 text-[#9BAEC0] transition-transform hidden sm:block ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
 
           {showDropdown && (
-            <div className="absolute right-0 mt-2 w-52 bg-white border border-[#E2E8F0] rounded-xl shadow-lg shadow-black/8 py-2 z-50 animate-in">
-              <div className="px-4 py-2 border-b border-[#E2E8F0]">
-                <p className="text-xs font-semibold text-[#172033]">{user?.fullName}</p>
-                <p className="text-[10px] text-[#94A3B8]">{user?.role} Account</p>
+            <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#DCE5EF] rounded-xl shadow-xl py-1.5 z-50 fade-in">
+              <div className="px-3.5 py-2.5 border-b border-[#DCE5EF]">
+                <p className="text-xs font-700 text-[#142238] truncate">{user?.fullName}</p>
+                <p className="text-[10px] text-[#9BAEC0] truncate mt-0.5">{user?.email}</p>
+                <StatusBadge status={user?.role} text={user?.role} />
               </div>
               <Link
                 to="/profile"
                 onClick={() => setShowDropdown(false)}
-                className="w-full text-left px-4 py-2 text-xs text-[#172033] hover:bg-[#F8FAFC] flex items-center gap-2 transition-colors font-medium"
+                className="flex items-center gap-2 px-3.5 py-2 text-xs text-[#142238] hover:bg-[#F5F8FC] transition-colors font-500"
               >
-                <User className="w-4 h-4 text-[#12355B]" />
-                My Official Profile
+                <User className="w-3.5 h-3.5 text-[#123B63]" />
+                My Profile
               </Link>
               <button
-                onClick={logout}
-                className="w-full text-left px-4 py-2 text-xs text-[#C94A4A] hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-[#E2E8F0] mt-1"
+                onClick={() => { logout(); setShowDropdown(false); }}
+                className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-[#C94A4A] hover:bg-[#FDE8E8] transition-colors border-t border-[#DCE5EF] mt-1 font-600"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
                 Sign Out
               </button>
             </div>
